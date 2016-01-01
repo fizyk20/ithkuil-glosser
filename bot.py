@@ -4,11 +4,8 @@ import time
 from settings import settings
 from ithkuil.morphology import fromString
 from ithkuil.morphology.exceptions import IthkuilException
-from argparse import ArgumentError
 
 class CommentLog:
-    
-    ID_LENGTH = 7  # ids have length 6
     
     def __init__(self, filename):
         self.readComments = set()
@@ -16,14 +13,11 @@ class CommentLog:
         try:
             with open(filename, 'r') as f:
                 for line in f:
-                    if len(line) >= self.ID_LENGTH:
-                        self.readComments.add(line[0:self.ID_LENGTH])
+                    self.readComments.add(line.rstrip())
         except FileNotFoundError:
             return  # we'll just continue with an empty list
                     
     def markRead(self, comment):
-        if len(comment) != self.ID_LENGTH:
-            raise ArgumentError('Invalid comment id: %s' % comment)
         self.readComments.add(comment)
         
     def save(self):
@@ -48,6 +42,7 @@ def parseComment(comment):
 def generateResponseText(postText):
     blocks = parseComment(postText) # returns a list of lists of words
     result = []
+    counter = 0
     for block in blocks:
         # each list of words is a text to gloss
         blockResult = []
@@ -60,18 +55,28 @@ def generateResponseText(postText):
                 continue
         
         result.append(settings['text_template'] % (' '.join(block), '\n'.join(blockResult)))
+        counter += len(blockResult)
     
     if result: 
-        return settings['post_template'] % '\n\n'.join(result)
+        return settings['post_template'] % '\n\n'.join(result), counter
     else:
-        return None
+        return None, 0
+    
+def handleSubmission(submission):
+    if not submission.selftext:
+        return 0
+    result, counter = generateResponseText(submission.selftext)
+    if result:
+        submission.add_comment(result)
+        
+    return counter
 
 def handleComment(comment):
-    result = generateResponseText(comment.body)
+    result, counter = generateResponseText(comment.body)
     if result:
         comment.reply(result)
 
-    return len(result)
+    return counter
 
 r = praw.Reddit(user_agent=settings['user-agent'])
 r.login(username=settings['username'], password=settings['password'], disable_warning=True)
@@ -85,14 +90,18 @@ while running:
         sub = r.get_subreddit(settings['subreddit'])
         counter = 0
         handledComments = 0
+        
+        for submission in sub.get_hot(limit=10):
+            if not readComments.contains(submission.id):
+                counter += handleSubmission(submission)
+                handledComments += 1
+                readComments.markRead(submission.id)
+            
         for comment in sub.get_comments():
             if not readComments.contains(comment.id):
                 counter += handleComment(comment)
                 handledComments += 1
-                try:
-                    readComments.markRead(comment.id)
-                except ArgumentError as e:
-                    print(e)
+                readComments.markRead(comment.id)
         print('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
         time.sleep(10)
     # stop on ctrl-c
