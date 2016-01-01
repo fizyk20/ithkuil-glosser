@@ -4,10 +4,11 @@ import time
 from settings import settings
 from ithkuil.morphology import fromString
 from ithkuil.morphology.exceptions import IthkuilException
+from argparse import ArgumentError
 
 class CommentLog:
     
-    ID_LENGTH = 6  # ids have length 6
+    ID_LENGTH = 7  # ids have length 6
     
     def __init__(self, filename):
         self.readComments = set()
@@ -16,13 +17,13 @@ class CommentLog:
             with open(filename, 'r') as f:
                 for line in f:
                     if len(line) >= self.ID_LENGTH:
-                        self.readComments.add(line[0:6])
+                        self.readComments.add(line[0:self.ID_LENGTH])
         except FileNotFoundError:
             return  # we'll just continue with an empty list
                     
     def markRead(self, comment):
         if len(comment) != self.ID_LENGTH:
-            return
+            raise ArgumentError('Invalid comment id: %s' % comment)
         self.readComments.add(comment)
         
     def save(self):
@@ -68,8 +69,11 @@ try:
                 if not readComments.contains(comment.id):
                     counter += handleComment(comment)
                     handledComments += 1
-                    readComments.markRead(comment.id)
-        print('Comments handled this pass: %s, words processed: %s\n' % (handledComments, counter))
+                    try:
+                        readComments.markRead(comment.id)
+                    except ArgumentError as e:
+                        print(e)
+        print('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
         time.sleep(10)
 finally:
     readComments.save()
