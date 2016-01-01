@@ -45,20 +45,31 @@ def parseComment(comment):
     
     return [block[1:] for block in map(lambda x: words(x), blocks) if toBeHandled(block)]
 
-def handleComment(comment):
-    blocks = parseComment(comment.body)
+def generateResponseText(postText):
+    blocks = parseComment(postText) # returns a list of lists of words
     result = []
     for block in blocks:
+        # each list of words is a text to gloss
+        blockResult = []
         for word in block:
             try:
                 wordObj = fromString(word)
-                result .append('* %s: %s' % (wordObj.word, wordObj.abbreviatedDescription()))
+                blockResult.append('* %s: %s' % (wordObj.word, wordObj.abbreviatedDescription()))
             except IthkuilException as e:
-                result.append('* %s: ERROR: %s' % (word, e))
+                blockResult.append('* %s: ERROR: %s' % (word, e))
                 continue
-        result.append('')
+        
+        result.append(settings['text_template'] % (' '.join(block), '\n'.join(blockResult)))
+    
+    if result: 
+        return settings['post_template'] % '\n\n'.join(result)
+    else:
+        return None
+
+def handleComment(comment):
+    result = generateResponseText(comment.body)
     if result:
-        comment.reply(settings['post_template'] % (' '.join(block), '\n'.join(result)))
+        comment.reply(result)
 
     return len(result)
 
@@ -67,26 +78,29 @@ r.login(username=settings['username'], password=settings['password'], disable_wa
 
 readComments = CommentLog('readComments-%s.txt' % settings['subreddit'])
 
-try:
-    while True:
-        try:
-            sub = r.get_subreddit(settings['subreddit'])
-            counter = 0
-            handledComments = 0
-            for submission in sub.get_hot(limit=10):
-                comments = praw.helpers.flatten_tree(submission.comments)
-                for comment in comments:
-                    if not readComments.contains(comment.id):
-                        counter += handleComment(comment)
-                        handledComments += 1
-                        try:
-                            readComments.markRead(comment.id)
-                        except ArgumentError as e:
-                            print(e)
-            print('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
-            time.sleep(10)
-        except praw.errors.RateLimitExceeded:
-            print('Rate limit exceeded, waiting 4 minutes')
-            time.sleep(240)
-finally:
-    readComments.save()
+running = True
+
+while running:
+    try:
+        sub = r.get_subreddit(settings['subreddit'])
+        counter = 0
+        handledComments = 0
+        for comment in sub.get_comments():
+            if not readComments.contains(comment.id):
+                counter += handleComment(comment)
+                handledComments += 1
+                try:
+                    readComments.markRead(comment.id)
+                except ArgumentError as e:
+                    print(e)
+        print('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
+        time.sleep(10)
+    # stop on ctrl-c
+    except KeyboardInterrupt:
+        running = False
+    # if limit exceeded, wait some more
+    except praw.errors.RateLimitExceeded as e:
+        print('Rate limit exceeded, waiting %s seconds' % e.sleep_time)
+        time.sleep(e.sleep_time)
+
+readComments.save()
