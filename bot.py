@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 import praw
+from prawoauth2 import PrawOAuth2Mini
 import time
+from datetime import datetime
 from settings import settings
 from ithkuil.morphology import fromString
 from ithkuil.morphology.exceptions import IthkuilException
+from praw.errors import OAuthInvalidToken
+
+def log(*args, **kwargs):
+    now = datetime.now()
+    print(now.strftime('[%Y-%m-%d %H:%M:%S]'), *args, **kwargs)
 
 class CommentLog:
     
@@ -79,7 +86,11 @@ def handleComment(comment):
     return counter
 
 r = praw.Reddit(user_agent=settings['user-agent'])
-r.login(username=settings['username'], password=settings['password'], disable_warning=True)
+
+oauth_helper = PrawOAuth2Mini(r, app_key=settings['app_key'],
+                               app_secret=settings['app_secret'],
+                               access_token=settings['access_token'],
+                               refresh_token=settings['refresh_token'], scopes=settings['scopes'])
 
 readComments = CommentLog('readComments-%s.txt' % settings['subreddit'])
 
@@ -102,14 +113,17 @@ while running:
                 counter += handleComment(comment)
                 handledComments += 1
                 readComments.markRead(comment.id)
-        print('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
+        log('Comments handled this pass: %s, words processed: %s' % (handledComments, counter))
         time.sleep(10)
     # stop on ctrl-c
     except KeyboardInterrupt:
         running = False
     # if limit exceeded, wait some more
     except praw.errors.RateLimitExceeded as e:
-        print('Rate limit exceeded, waiting %s seconds' % e.sleep_time)
+        log('Rate limit exceeded, waiting %s seconds' % e.sleep_time)
         time.sleep(e.sleep_time)
+    except OAuthInvalidToken:
+        log('Refreshing token')
+        oauth_helper.refresh()
 
 readComments.save()
