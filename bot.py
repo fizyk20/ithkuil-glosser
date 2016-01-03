@@ -26,6 +26,8 @@ class CommentLog:
                     
     def markRead(self, comment):
         self.readComments.add(comment)
+        with open(self.filename, 'a') as f:
+        	f.write(comment + '\n')
         
     def save(self):
         with open(self.filename, 'w') as f:
