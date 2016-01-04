@@ -124,6 +124,11 @@ while running:
     except praw.errors.RateLimitExceeded as e:
         log('Rate limit exceeded, waiting %s seconds' % e.sleep_time)
         time.sleep(e.sleep_time)
+    # sometimes a HTTPError is thrown - just wait a bit
+    except praw.errors.HTTPException:
+        log('HTTPError - waiting 30 secons')
+        time.sleep(30)
+    # refresh token on OAuthInvalidToken
     except OAuthInvalidToken:
         log('Refreshing token')
         oauth_helper.refresh()
