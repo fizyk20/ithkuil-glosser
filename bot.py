@@ -126,11 +126,15 @@ while running:
         time.sleep(e.sleep_time)
     # sometimes a HTTPError is thrown - just wait a bit
     except praw.errors.HTTPException:
-        log('HTTPError - waiting 30 secons')
+        log('HTTPError - waiting 30 seconds')
         time.sleep(30)
     # refresh token on OAuthInvalidToken
     except OAuthInvalidToken:
         log('Refreshing token')
         oauth_helper.refresh()
+    # other exceptions
+    except Exception as e:
+        log('Other exception: %s - waiting 60 seconds', str(e))
+        time.sleep(60)
 
 readComments.save()
