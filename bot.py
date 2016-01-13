@@ -4,7 +4,7 @@ from prawoauth2 import PrawOAuth2Mini
 import time
 from datetime import datetime
 from settings import settings
-from ithkuil.morphology import fromString
+from ithkuil.morphology.words import Factory
 from ithkuil.morphology.exceptions import IthkuilException
 from praw.errors import OAuthInvalidToken
 
@@ -57,7 +57,7 @@ def generateResponseText(postText):
         blockResult = []
         for word in block:
             try:
-                wordObj = fromString(word)
+                wordObj = Factory.parseWord(word)
                 blockResult.append('* %s: %s' % (wordObj.word, wordObj.abbreviatedDescription()))
             except IthkuilException as e:
                 blockResult.append('* %s: ERROR: %s' % (word, e))
@@ -134,7 +134,7 @@ while running:
         oauth_helper.refresh()
     # other exceptions
     except Exception as e:
-        log('Other exception: %s - waiting 60 seconds', str(e))
+        log('Other exception: %s - waiting 60 seconds' % str(e))
         time.sleep(60)
 
 readComments.save()
